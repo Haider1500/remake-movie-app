@@ -15,7 +15,7 @@ function Stars({ numOfStar = 5, color = "gold", onSetRating }: any) {
         {Array.from({ length: numOfStar }, (_, i) => (
           <Star
             color={color}
-            key={i}
+            key={crypto.randomUUID}
             starId={i + 1}
             setHoveredStar={setHoveredStar}
             hoveredStar={hoveredStar}

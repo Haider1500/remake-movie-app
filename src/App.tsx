@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import StarRating from "./StarRating";
+import "./App.css";
 
 const average = (arr: any) => {
   return arr.reduce((acc: any, curr: any, i: any, arr: any) => {
@@ -11,12 +12,24 @@ function App() {
   const [query, setQuery] = useState("");
   const [searchedMovies, setSearchedMovies] = useState([]);
   const [selectedId, setSelectedId] = useState("");
-  const [watchedMovies, setWatchedMovies] = useState([]);
+  const [watchedMovies, setWatchedMovies] = useState<any>([]);
 
   function handleSelectedId(id: any) {
     console.log(id);
     setSelectedId(id);
   }
+  function handleAddMovies(movie: any) {
+    setWatchedMovies((watchedMovies: any) => [...watchedMovies, movie]);
+  }
+
+  function handleCloseMovie() {
+    setSelectedId("");
+  }
+
+  function handleDeleteMovie(id: any) {
+    setWatchedMovies(watchedMovies.filter((movie: any) => movie.imbdID != id));
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-800 relative top-0">
       <Navbar>
@@ -35,11 +48,20 @@ function App() {
           />
         </Box>
         <Box>
-          <WatchedMovieDetails watchedMovies={watchedMovies} />
-
-          {/* 
-          <MoviePreview />
-          <MovieDetails /> */}
+          {selectedId ? (
+            <WatchedMovieDetails
+              watchedMovies={watchedMovies}
+              onWatchedMovies={handleAddMovies}
+              selectedId={selectedId}
+              onSelectId={setSelectedId}
+              onCloseMovie={handleCloseMovie}
+            />
+          ) : (
+            <WatchedMovieStats
+              watchedMovies={watchedMovies}
+              onDeleteMovie={handleDeleteMovie}
+            />
+          )}
         </Box>
       </Main>
     </div>
@@ -94,7 +116,7 @@ function Main({ children }: any) {
 function Box({ children }: any) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="flex flex-col w-[500px] rounded-xl bg-gray-700 text-white z-0 relative overflow-hidden">
+    <div className="flex flex-col w-[400px] rounded-xl bg-gray-700 text-white z-0 relative overflow-y-scroll scroll-bar ">
       <button
         className="text-xl h-6 flex items-center justify-center bg-black w-6 rounded-xl absolute top-2 right-2"
         onClick={() => setOpen(!open)}
@@ -113,36 +135,54 @@ function MoviesList({
   onSearchedMovies,
   query,
 }: any) {
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     const abortController = new AbortController();
     async function fetchData() {
+      setIsLoading(true);
       const res = await fetch(
         `http://www.omdbapi.com/?apikey=654c0727&s=${query}`,
         { signal: abortController.signal }
       );
       const response = await res.json();
       onSearchedMovies(response.Search);
+      setIsLoading(false);
     }
-    if (!query || query.length === 2) return;
+    if (!query || query.length === 2) {
+      onSearchedMovies([]);
+      onSelectId(null);
+      return;
+    }
     fetchData();
     return () => abortController.abort();
   }, [query]);
   return (
-    <div className="overflow-y-scroll">
-      {movies &&
-        movies.map((movie: any, i: any) => (
-          <Movie
-            movie={movie}
-            key={movie.imdbID}
-            onSelectId={onSelectId}
-            selectedId={selectedId}
-          />
-        ))}
+    <div className="">
+      {isLoading ? (
+        <Loading />
+      ) : (
+        <>
+          {movies &&
+            movies.map((movie: any, i: any) => (
+              <Movie
+                movie={movie}
+                key={movie.Title}
+                onSelectId={onSelectId}
+                selectedId={selectedId}
+              />
+            ))}
+        </>
+      )}
     </div>
   );
 }
 
-function Movie({ movie, onSelectId, selectedId }: any) {
+function Loading() {
+  return <div className="border">Loading...</div>;
+}
+
+function Movie({ movie, onSelectId }: any) {
   // const isSelected = selectedId == movie.imdbID;
   return (
     <div
@@ -158,116 +198,206 @@ function Movie({ movie, onSelectId, selectedId }: any) {
   );
 }
 
-function WatchedMovieDetails({ watchedMovies }: any) {
-  // console.log(watchedMovies);
-  const userRating = average(watchedMovies.map((m: any) => m.userRating));
-  const imdbRating = average(watchedMovies.map((m: any) => m.imdbRating));
-  const runtime = average(watchedMovies.map((m: any) => m.runtime));
+function WatchedMovieDetails({
+  watchedMovies,
+  onWatchedMovies,
+  selectedId,
+  onCloseMovie,
+}: any) {
+  const [userRating, setUserRating] = useState(0);
+  const [selectedMovie, setSelectedMovie] = useState<any>();
+
+  useEffect(
+    function () {
+      async function getMovieDetails() {
+        const res = await fetch(
+          `http://www.omdbapi.com/?apikey=654c0727&i=${selectedId}`
+        );
+        const watchedMovie = await res.json();
+        setSelectedMovie(watchedMovie);
+      }
+      getMovieDetails();
+    },
+    [selectedId]
+  );
+
+  useEffect(
+    function () {
+      if (!selectedMovie?.Title) return;
+      document.title = `movie | ${selectedMovie?.Title}`;
+      return () => {
+        document.title = "usePopcorn";
+      };
+    },
+    [selectedMovie]
+  );
+  if (!selectedMovie) return;
+  const {
+    Genre: genre,
+    Released: released,
+    Title: title,
+    Poster: poster,
+    imdbRating,
+    Runtime: runtime,
+  } = selectedMovie;
+
+  function handleEscapePress(e: KeyboardEvent) {
+    if (e.key == "Escape") {
+      onCloseMovie();
+    }
+  }
+  window.addEventListener("keydown", handleEscapePress);
+
+  function handleAdd() {
+    console.log("control in handleAdd");
+    const updatedMovie = {
+      title,
+      poster,
+      imdbRating,
+      userRating,
+      runtime,
+      imbdID: selectedMovie?.imdbID,
+    };
+
+    onWatchedMovies(updatedMovie);
+    onCloseMovie();
+  }
 
   return (
+    <div className="flex flex-col gap-4">
+      <header className="flex items-center justify-between rounded-lg bg-gray-600 ">
+        <button
+          className="absolute top-2 text-black w-8 bg-white rounded-xl"
+          onClick={onCloseMovie}
+        >
+          &larr;
+        </button>
+        <img src={poster} alt="" className="w-28 h-52" />
+        <div className="flex flex-col gap-2 p-4">
+          <h2 className="font-semibold text-xl">{title}</h2>
+          <p>{released} • 51 min</p>
+          <p>{genre}</p>
+          <p>⭐{imdbRating} IMDb rating</p>
+        </div>
+      </header>
+      <div className="flex flex-col items-center justify-center grow gap-4 p-2">
+        <AddMovieToList
+          userRating={userRating}
+          onUserRating={setUserRating}
+          onAddMovie={handleAdd}
+          watchedMovies={watchedMovies}
+          selectedMovie={selectedMovie}
+        />
+        <MovieCast selectedMovie={selectedMovie} />
+      </div>
+    </div>
+  );
+}
+
+function AddMovieToList({
+  userRating,
+  onUserRating,
+  onAddMovie,
+  watchedMovies,
+  selectedMovie,
+}: any) {
+  const isRated = watchedMovies
+    .map((movie: any) => movie.imbdID)
+    .includes(selectedMovie.imdbID);
+  const myRating = watchedMovies.find(
+    (movie: any) => movie.imbdID == selectedMovie.imdbID
+  );
+  console.log(myRating, "============myrating");
+
+  return (
+    <div className="items-center justify-center flex w-11/12  bg-gray-600 rounded-xl flex-col gap-2 h-fit px-4 py-2">
+      {isRated ? (
+        <p>you have rated ⭐{myRating.userRating}</p>
+      ) : (
+        <>
+          <StarRating
+            numOfStar={10}
+            color={"gold"}
+            onSetRating={onUserRating}
+          />
+          {userRating > 0 && (
+            <button
+              className="px-6 py-1 bg-indigo-600 rounded-lg"
+              onClick={onAddMovie}
+            >
+              + Add to List
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function MovieCast({ selectedMovie }: any) {
+  return (
+    <div className="flex flex-col w-11/12 gap-4 ">
+      <p>
+        <em>{selectedMovie.Plot}</em>
+      </p>
+      <p>Starring {selectedMovie.Actors}</p>
+      <p>Directed by {selectedMovie.Director}</p>
+    </div>
+  );
+}
+
+function WatchedMovieStats({ watchedMovies, onDeleteMovie }: any) {
+  const userRating = average(
+    watchedMovies.map((m: any) => Number(m.userRating))
+  );
+  const imdbRating = average(
+    watchedMovies.map((m: any) => Number(m.imdbRating))
+  );
+  const runtime = average(
+    watchedMovies.map((m: any) => Number(m.runtime.split(" ")[0]))
+  );
+  return (
     <div>
-      <div className="flex flex-col items-center justify-center h-28 gap-2 rounded-xl z-10 shadow-2xl bg-gray-600">
+      <div className="flex flex-col items-center justify-center h-28 gap-2 rounded-xl z-10 shadow-2xl bg-gray-600 px-4">
         <h3 className="font-semibold">MOVIES YOU WATCHED</h3>
         <div className="flex gap-2">
-          <span>#️⃣ 0 movies</span>
-          <span>⭐ {imdbRating}</span>
-          <span>🌟 {userRating}</span>
-          <span>⏳ {runtime} min</span>
+          <span>#️⃣ {watchedMovies.length} movies</span>
+          <span>⭐ {imdbRating.toFixed(1)}</span>
+          <span>🌟 {userRating.toFixed(1)}</span>
+          <span>⏳ {runtime.toFixed(2)} min</span>
         </div>
       </div>
       <ul className="">
         {watchedMovies.map((movie: any) => (
-          <WatchedMovie movie={movie} key={movie.Title} />
+          <WatchedMovie
+            movie={movie}
+            key={movie.Title}
+            onDeleteMovie={onDeleteMovie}
+          />
         ))}
       </ul>
     </div>
   );
 }
 
-function WatchedMovie({ movie }: any) {
+function WatchedMovie({ movie, onDeleteMovie }: any) {
   return (
-    <li className="flex items-center p-4 gap-4">
-      <img src={movie.Poster} alt="" className="object-cover w-16" />
-      <div>
-        <h2>{movie.Title}</h2>
-        <span>⭐️ {movie.imdbRating}</span>
-        <span>🌟 {movie.userRating}</span>
-        <span>⏳ {movie.runtime}</span>
+    <li className="flex items-center justify-between p-2 gap-4">
+      <img src={movie.poster} alt={movie.title} className="object-cover w-24" />
+      <div className="flex flex-col gap-2">
+        <h2 className="font-semibold text-lg">{movie.title}</h2>
+        <div className="flex gap-2">
+          <span>⭐️ {movie.imdbRating}</span>
+          <span>🌟 {movie.userRating}</span>
+          <span>⏳ {movie.runtime}</span>
+        </div>
       </div>
-    </li>
-  );
-}
-const selectedMovie = {
-  imdbID: "tt1375666",
-  Title: "Inception",
-  Year: "2010",
-  Poster:
-    "https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_SX300.jpg",
-  runtime: 148,
-  imdbRating: 8.8,
-  userRating: 10,
-  date: "31 Mar 2015",
-};
-
-function MoviePreview() {
-  return (
-    <header className="flex gap-4 items-center rounded-lg bg-gray-600 ">
-      <Poster />
-      <MovieRatings />
-    </header>
-  );
-}
-
-function Poster() {
-  return <img src={selectedMovie?.Poster} alt="" className="w-32" />;
-}
-
-function MovieRatings() {
-  return (
-    <div className="flex flex-col gap-2 pt-4">
-      <h2 className="font-semibold text-2xl">{selectedMovie?.Title}</h2>
-      <p>{selectedMovie?.date}• 51 min</p>
-      <p>Documentary</p>
-      <p>⭐7.1 IMDb rating</p>
-    </div>
-  );
-}
-
-function MovieDetails({}: any) {
-  const [userRating, setUserRating] = useState();
-  function handleAdd() {
-    console.log(userRating, "======userRating");
-  }
-  return (
-    <div className="flex flex-col items-center justify-center grow gap-4 p-2">
-      <AddMovieToList onUserRating={setUserRating} onAddMovie={handleAdd} />
-      <MovieCast />
-    </div>
-  );
-}
-
-function AddMovieToList({ onUserRating, onAddMovie }: any) {
-  return (
-    <div className="items-center justify-center flex w-11/12  bg-gray-600 rounded-xl flex-col gap-2 h-fit px-4 py-2">
-      <StarRating numOfStar={10} color={"gold"} onSetRating={onUserRating} />
       <button
-        className="px-6 py-1 bg-indigo-600 rounded-lg"
-        onClick={onAddMovie}
+        className="w-10 rounded-xl bg-red-700"
+        onClick={() => onDeleteMovie(movie.imbdID)}
       >
-        + Add to List
+        X
       </button>
-    </div>
-  );
-}
-
-function MovieCast() {
-  return (
-    <div className="flex flex-col w-11/12 gap-4 ">
-      <p>
-        <em>The Science of Christopher Nolan's Sci-Fi, Interstellar.</em>
-      </p>
-      <p>Starring Matthew McConaughey, Kip Thorne, Christopher Nolan</p>
-      <p>Directed by Gail Willumsen</p>
-    </div>
+    </li>
   );
 }
