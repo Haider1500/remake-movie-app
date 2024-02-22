@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import StarRating from "./StarRating";
 import "./App.css";
 
 const average = (arr: any) => {
-  return arr.reduce((acc: any, curr: any, i: any, arr: any) => {
+  return arr?.reduce((acc: any, curr: any, i: any, arr: any) => {
     return acc + curr / arr.length;
   }, 0);
 };
@@ -12,23 +12,50 @@ function App() {
   const [query, setQuery] = useState("");
   const [searchedMovies, setSearchedMovies] = useState([]);
   const [selectedId, setSelectedId] = useState("");
-  const [watchedMovies, setWatchedMovies] = useState<any>([]);
-
+  const [watchedMovies, setWatchedMovies] = useState<any>(() => {
+    const value = localStorage.getItem("watchedMovies");
+    if (value) return JSON.parse(value);
+  });
   function handleSelectedId(id: any) {
     console.log(id);
     setSelectedId(id);
   }
-  function handleAddMovies(movie: any) {
+  const handleAddMovies = function (movie: any) {
     setWatchedMovies((watchedMovies: any) => [...watchedMovies, movie]);
-  }
+    // localStorage.setItem(
+    //   "watchedMovies",
+    //   JSON.stringify([...watchedMovies, movie])
+    // );
+  };
 
-  function handleCloseMovie() {
-    setSelectedId("");
-  }
+  useEffect(() => {
+    console.log(localStorage, "lovalStorage");
+    localStorage.setItem("watchedMovies", JSON.stringify(watchedMovies));
+  }, [watchedMovies]);
 
-  function handleDeleteMovie(id: any) {
-    setWatchedMovies(watchedMovies.filter((movie: any) => movie.imbdID != id));
-  }
+  // useEffect(() => {
+  //   const value = window.localStorage.getItem("watchedMovies");
+  //   if (value !== null) {
+  //     JSON.parse(value);
+  //     console.log(value);
+  //   }
+  // }, []);
+
+  const handleCloseMovie = useCallback(
+    function () {
+      setSelectedId("");
+    },
+    [selectedId]
+  );
+
+  const handleDeleteMovie = useCallback(
+    function (id: any) {
+      setWatchedMovies(
+        watchedMovies.filter((movie: any) => movie.imbdID != id)
+      );
+    },
+    [watchedMovies]
+  );
 
   return (
     <div className="flex flex-col h-screen bg-gray-800 relative top-0">
@@ -70,13 +97,13 @@ function App() {
 
 export default App;
 
-function Navbar({ children }: any) {
+const Navbar = function ({ children }: any) {
   return (
     <div className="flex justify-between bg-indigo-600 h-16 w-[95%] mx-auto rounded-2xl items-center px-4 text-white mt-5">
       {children}
     </div>
   );
-}
+};
 
 function Logo() {
   return (
@@ -87,13 +114,12 @@ function Logo() {
   );
 }
 
-function InputBar({ onSetQuery, movies }: any) {
+function InputBar({ onSetQuery }: any) {
   return (
     <input
       type="text"
       placeholder="Search movies..."
       className="h-10 w-1/2 rounded-lg bg-indigo-500 p-2 outline-none"
-      // value={query}
       onChange={(e: any) => {
         onSetQuery(e.target.value);
       }}
@@ -101,9 +127,9 @@ function InputBar({ onSetQuery, movies }: any) {
   );
 }
 
-function Results({ movies }: any) {
+const Results = memo(function ({ movies }: any) {
   return <p>Found {movies && movies.length} results</p>;
-}
+});
 
 function Main({ children }: any) {
   return (
@@ -162,7 +188,7 @@ function MoviesList({
       {isLoading ? (
         <Loading />
       ) : (
-        <>
+        <ul>
           {movies &&
             movies.map((movie: any, i: any) => (
               <Movie
@@ -172,7 +198,7 @@ function MoviesList({
                 selectedId={selectedId}
               />
             ))}
-        </>
+        </ul>
       )}
     </div>
   );
@@ -185,7 +211,7 @@ function Loading() {
 function Movie({ movie, onSelectId }: any) {
   // const isSelected = selectedId == movie.imdbID;
   return (
-    <div
+    <li
       className={`flex items-center gap-4 p-4 text-white cursor-pointer hover:bg-gray-600`}
       onClick={() => onSelectId(movie.imdbID)}
     >
@@ -194,11 +220,11 @@ function Movie({ movie, onSelectId }: any) {
         <p>{movie.Title}</p>
         <p className="flex">🗓 {movie.Year}</p>
       </div>
-    </div>
+    </li>
   );
 }
 
-function WatchedMovieDetails({
+const WatchedMovieDetails = memo(function ({
   watchedMovies,
   onWatchedMovies,
   selectedId,
@@ -221,6 +247,16 @@ function WatchedMovieDetails({
     [selectedId]
   );
 
+  useEffect(() => {
+    function handleEscapePress(e: KeyboardEvent) {
+      if (e.key == "Escape") {
+        onCloseMovie();
+      }
+    }
+    window.addEventListener("keydown", handleEscapePress);
+    return () => window.removeEventListener("keydown", handleEscapePress);
+  }, []);
+
   useEffect(
     function () {
       if (!selectedMovie?.Title) return;
@@ -241,15 +277,7 @@ function WatchedMovieDetails({
     Runtime: runtime,
   } = selectedMovie;
 
-  function handleEscapePress(e: KeyboardEvent) {
-    if (e.key == "Escape") {
-      onCloseMovie();
-    }
-  }
-  window.addEventListener("keydown", handleEscapePress);
-
   function handleAdd() {
-    console.log("control in handleAdd");
     const updatedMovie = {
       title,
       poster,
@@ -292,7 +320,7 @@ function WatchedMovieDetails({
       </div>
     </div>
   );
-}
+});
 
 function AddMovieToList({
   userRating,
@@ -346,29 +374,32 @@ function MovieCast({ selectedMovie }: any) {
   );
 }
 
-function WatchedMovieStats({ watchedMovies, onDeleteMovie }: any) {
+const WatchedMovieStats = memo(function ({
+  watchedMovies,
+  onDeleteMovie,
+}: any) {
   const userRating = average(
-    watchedMovies.map((m: any) => Number(m.userRating))
+    watchedMovies?.map((m: any) => Number(m.userRating))
   );
   const imdbRating = average(
-    watchedMovies.map((m: any) => Number(m.imdbRating))
+    watchedMovies?.map((m: any) => Number(m.imdbRating))
   );
   const runtime = average(
-    watchedMovies.map((m: any) => Number(m.runtime.split(" ")[0]))
+    watchedMovies?.map((m: any) => Number(m.runtime.split(" ")[0]))
   );
   return (
     <div>
       <div className="flex flex-col items-center justify-center h-28 gap-2 rounded-xl z-10 shadow-2xl bg-gray-600 px-4">
         <h3 className="font-semibold">MOVIES YOU WATCHED</h3>
         <div className="flex gap-2">
-          <span>#️⃣ {watchedMovies.length} movies</span>
+          <span>#️⃣ {watchedMovies?.length} movies</span>
           <span>⭐ {imdbRating.toFixed(1)}</span>
           <span>🌟 {userRating.toFixed(1)}</span>
           <span>⏳ {runtime.toFixed(2)} min</span>
         </div>
       </div>
       <ul className="">
-        {watchedMovies.map((movie: any) => (
+        {watchedMovies?.map((movie: any) => (
           <WatchedMovie
             movie={movie}
             key={movie.Title}
@@ -378,7 +409,7 @@ function WatchedMovieStats({ watchedMovies, onDeleteMovie }: any) {
       </ul>
     </div>
   );
-}
+});
 
 function WatchedMovie({ movie, onDeleteMovie }: any) {
   return (
