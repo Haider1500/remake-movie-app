@@ -1,6 +1,9 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import StarRating from "./StarRating";
 import "./App.css";
+import { useFetchMovieDetails } from "./useFetchMovieDetails";
+import { useLocalStorage } from "./useLocalStorage";
+import { useKey } from "./useKey";
 
 const average = (arr: any) => {
   return arr?.reduce((acc: any, curr: any, i: any, arr: any) => {
@@ -12,26 +15,30 @@ function App() {
   const [query, setQuery] = useState("");
   const [searchedMovies, setSearchedMovies] = useState([]);
   const [selectedId, setSelectedId] = useState("");
-  const [watchedMovies, setWatchedMovies] = useState<any>(() => {
-    const value = localStorage.getItem("watchedMovies");
-    if (value) return JSON.parse(value);
-  });
+  // const [watchedMovies, setWatchedMovies] = useState<any>(() => {
+  //   const value = localStorage.getItem("watchedMovies");
+  //   if (value) return JSON.parse(value);
+  // });
+  const [watchedMovies, setWatchedMovies] = useLocalStorage(
+    [],
+    "watchedMovies"
+  );
   function handleSelectedId(id: any) {
     console.log(id);
     setSelectedId(id);
   }
   const handleAddMovies = function (movie: any) {
     setWatchedMovies((watchedMovies: any) => [...watchedMovies, movie]);
-    // localStorage.setItem(
-    //   "watchedMovies",
-    //   JSON.stringify([...watchedMovies, movie])
-    // );
   };
+  // localStorage.setItem(
+  //   "watchedMovies",
+  //   JSON.stringify([...watchedMovies, movie])
+  // );
 
-  useEffect(() => {
-    console.log(localStorage, "lovalStorage");
-    localStorage.setItem("watchedMovies", JSON.stringify(watchedMovies));
-  }, [watchedMovies]);
+  // useEffect(() => {
+  //   console.log(localStorage, "lovalStorage");
+  //   localStorage.setItem("watchedMovies", JSON.stringify(watchedMovies));
+  // }, [watchedMovies]);
 
   // useEffect(() => {
   //   const value = window.localStorage.getItem("watchedMovies");
@@ -114,10 +121,31 @@ function Logo() {
   );
 }
 
-function InputBar({ onSetQuery }: any) {
+function InputBar({ onSetQuery, query }: any) {
+  const inputRef = useRef<any>(null);
+  // useEffect(() => {
+  //   // inputRef.current.focus();
+  //   console.log(inputRef);
+  //   function callback(e: KeyboardEvent) {
+  //     if (document.activeElement === inputRef.current) return;
+  //     if (e.code === "Enter") {
+  //       inputRef.current.focus();
+  //       onSetQuery("");
+  //     }
+  //   }
+  //   document.addEventListener("keydown", callback);
+  // }, []);
+  useKey("Enter", function () {
+    if (document.activeElement === inputRef.current) return;
+    inputRef.current.focus();
+    onSetQuery("");
+  });
+
   return (
     <input
       type="text"
+      ref={inputRef}
+      value={query}
       placeholder="Search movies..."
       className="h-10 w-1/2 rounded-lg bg-indigo-500 p-2 outline-none"
       onChange={(e: any) => {
@@ -229,33 +257,25 @@ const WatchedMovieDetails = memo(function ({
   onWatchedMovies,
   selectedId,
   onCloseMovie,
+  onSelectId,
 }: any) {
   const [userRating, setUserRating] = useState(0);
-  const [selectedMovie, setSelectedMovie] = useState<any>();
+  // const [selectedMovie, setSelectedMovie] = useState<any>();
+  // const [isLoading, setIsLoading] = useState(false);
+  const { isLoading, selectedMovie } = useFetchMovieDetails(selectedId);
 
-  useEffect(
-    function () {
-      async function getMovieDetails() {
-        const res = await fetch(
-          `http://www.omdbapi.com/?apikey=654c0727&i=${selectedId}`
-        );
-        const watchedMovie = await res.json();
-        setSelectedMovie(watchedMovie);
-      }
-      getMovieDetails();
-    },
-    [selectedId]
-  );
+  const countReft = useRef(0);
 
-  useEffect(() => {
-    function handleEscapePress(e: KeyboardEvent) {
-      if (e.key == "Escape") {
-        onCloseMovie();
-      }
-    }
-    window.addEventListener("keydown", handleEscapePress);
-    return () => window.removeEventListener("keydown", handleEscapePress);
-  }, []);
+  useKey("Escape", onCloseMovie);
+  // useEffect(() => {
+  //   function handleEscapePress(e: KeyboardEvent) {
+  //     if (e.key == "Escape") {
+  //       onCloseMovie();
+  //     }
+  //   }
+  //   window.addEventListener("keydown", handleEscapePress);
+  //   return () => window.removeEventListener("keydown", handleEscapePress);
+  // }, []);
 
   useEffect(
     function () {
@@ -267,6 +287,11 @@ const WatchedMovieDetails = memo(function ({
     },
     [selectedMovie]
   );
+
+  useEffect(() => {
+    if (userRating) countReft.current += 1;
+    console.log(countReft.current, "=========userClicked The stars");
+  }, [userRating]);
   if (!selectedMovie) return;
   const {
     Genre: genre,
@@ -293,31 +318,37 @@ const WatchedMovieDetails = memo(function ({
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-center justify-between rounded-lg bg-gray-600 ">
-        <button
-          className="absolute top-2 text-black w-8 bg-white rounded-xl"
-          onClick={onCloseMovie}
-        >
-          &larr;
-        </button>
-        <img src={poster} alt="" className="w-28 h-52" />
-        <div className="flex flex-col gap-2 p-4">
-          <h2 className="font-semibold text-xl">{title}</h2>
-          <p>{released} • 51 min</p>
-          <p>{genre}</p>
-          <p>⭐{imdbRating} IMDb rating</p>
-        </div>
-      </header>
-      <div className="flex flex-col items-center justify-center grow gap-4 p-2">
-        <AddMovieToList
-          userRating={userRating}
-          onUserRating={setUserRating}
-          onAddMovie={handleAdd}
-          watchedMovies={watchedMovies}
-          selectedMovie={selectedMovie}
-        />
-        <MovieCast selectedMovie={selectedMovie} />
-      </div>
+      {isLoading ? (
+        <Loading />
+      ) : (
+        <>
+          <header className="flex items-center justify-between rounded-lg bg-gray-600 ">
+            <button
+              className="absolute top-2 text-black w-8 bg-white rounded-xl"
+              onClick={onCloseMovie}
+            >
+              &larr;
+            </button>
+            <img src={poster} alt="" className="w-28 h-52" />
+            <div className="flex flex-col gap-2 p-4">
+              <h2 className="font-semibold text-xl">{title}</h2>
+              <p>{released} • 51 min</p>
+              <p>{genre}</p>
+              <p>⭐{imdbRating} IMDb rating</p>
+            </div>
+          </header>
+          <div className="flex flex-col items-center justify-center grow gap-4 p-2">
+            <AddMovieToList
+              userRating={userRating}
+              onUserRating={setUserRating}
+              onAddMovie={handleAdd}
+              watchedMovies={watchedMovies}
+              selectedMovie={selectedMovie}
+            />
+            <MovieCast selectedMovie={selectedMovie} />
+          </div>
+        </>
+      )}
     </div>
   );
 });
@@ -342,25 +373,31 @@ function AddMovieToList({
       {isRated ? (
         <p>you have rated ⭐{myRating.userRating}</p>
       ) : (
-        <>
-          <StarRating
-            numOfStar={10}
-            color={"gold"}
-            onSetRating={onUserRating}
-          />
-          {userRating > 0 && (
-            <button
-              className="px-6 py-1 bg-indigo-600 rounded-lg"
-              onClick={onAddMovie}
-            >
-              + Add to List
-            </button>
-          )}
-        </>
+        <StarRatingBox
+          onUserRating={onUserRating}
+          onAddMovie={onAddMovie}
+          userRating={userRating}
+        />
       )}
     </div>
   );
 }
+
+const StarRatingBox = function ({ onUserRating, userRating, onAddMovie }: any) {
+  return (
+    <>
+      <StarRating numOfStar={10} color={"gold"} onSetRating={onUserRating} />
+      {userRating > 0 && (
+        <button
+          className="px-6 py-1 bg-indigo-600 rounded-lg"
+          onClick={onAddMovie}
+        >
+          + Add to List
+        </button>
+      )}
+    </>
+  );
+};
 
 function MovieCast({ selectedMovie }: any) {
   return (
@@ -378,6 +415,7 @@ const WatchedMovieStats = memo(function ({
   watchedMovies,
   onDeleteMovie,
 }: any) {
+  console.log(watchedMovies, "==========watchedMovies");
   const userRating = average(
     watchedMovies?.map((m: any) => Number(m.userRating))
   );
